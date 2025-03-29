@@ -1,7 +1,3 @@
 <template>
-  <div class="relative">
-    <Cube />
-    <!-- <Panorama /> -->
-    <!-- <Hdr /> -->
-  </div>
+  <Cube />
 </template>

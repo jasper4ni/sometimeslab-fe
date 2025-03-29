@@ -21,21 +21,28 @@ export function createRenderer(width: number, height: number) {
   return renderer;
 }
 
-export function createManager(recall: Function) {
+export function createManager(recall?: Function) {
+  const { setProgress } = useAppStore();
+
   // 监听所有资源加载完成
   const manager = new THREE.LoadingManager();
   manager.onLoad = function () {
     console.log("✅ 所有资源加载完毕！");
+    setProgress({ on: false });
+
     if (recall) recall();
   };
 
   // 监听加载进度
   manager.onProgress = function (url, loaded, total) {
+    setProgress({ on: true, max: total, value: loaded });
+
     console.log(`📦 加载进度: ${loaded} / ${total} - ${url}`);
   };
 
   // 监听加载错误
   manager.onError = function (url) {
+    setProgress({ on: true, max: 100, value: 100 });
     console.error(`❌ 资源加载失败: ${url}`);
   };
 
@@ -82,7 +89,7 @@ export function createIcon(
   iconPath: string,
   scene: THREE.Scene,
   { scaleX, scaleY }: { scaleX: number; scaleY: number },
-  payload: Object
+  payload: Record<string, any>
 ) {
   let iconTexture = iconCache.get(iconPath);
   if (!iconTexture) {
@@ -130,8 +137,8 @@ export function createControl(
   return controls;
 }
 
-export const loadTexture = (url: string) => {
-  const loader = new THREE.TextureLoader();
+export const loadTexture = (url: string, manager: THREE.LoadingManager) => {
+  const loader = new THREE.TextureLoader(manager);
   const texture = loader.load(url, (texture) => {
     texture.colorSpace = THREE.SRGBColorSpace; // 设置正确的颜色空间
     texture.minFilter = THREE.LinearFilter;

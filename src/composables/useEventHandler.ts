@@ -9,15 +9,22 @@ interface HandleOnWheelParams {
 interface HandleMouseUpParams {
   raycaster: THREE.Raycaster;
   scene: THREE.Scene;
-  mouse: THREE.Vector2;
   icons: Array<THREE.Sprite>;
   camera: THREE.PerspectiveCamera;
+  iconCallback?: Function;
+}
+interface HandleOnResizeParams {
+  width: Ref<number | undefined>;
+  height: Ref<number | undefined>;
+  camera: THREE.PerspectiveCamera;
+  renderer: THREE.WebGLRenderer;
 }
 
 const minFov = 30;
 const maxFov = 100;
 const dragThreshold = 5;
 const mouseDownPosition = { x: 0, y: 0 };
+const mouse = new THREE.Vector2();
 
 export const handleOnWheel = ({
   loading,
@@ -41,9 +48,9 @@ export const handleMouseDown = (event: MouseEvent) => {
 export const handleMouseUp = ({
   raycaster,
   scene,
-  mouse,
   icons,
   camera,
+  iconCallback,
 }: HandleMouseUpParams) => {
   return (event: MouseEvent) => {
     console.log("当前相机位置:", { ...camera.position });
@@ -67,13 +74,30 @@ export const handleMouseUp = ({
       // createIcon(position);
     }
     // 计算射线与场景中的对象相交情况
-    if (distance < dragThreshold && icons && icons.length) {
+    console.log(icons);
+
+    if (distance < dragThreshold && icons && icons.length && iconCallback) {
       const intersectsIcon = raycaster.intersectObjects(icons, true);
 
       if (intersectsIcon.length > 0) {
         const selectedIcon = intersectsIcon[0].object;
-        console.log(selectedIcon.userData);
+        iconCallback(selectedIcon.userData);
       }
     }
+  };
+};
+
+export const handleOnResize = ({
+  width,
+  height,
+  camera,
+  renderer,
+}: HandleOnResizeParams) => {
+  return () => {
+    width.value = window.innerWidth;
+    height.value = window.innerHeight;
+    camera.aspect = width.value / height.value;
+    camera.updateProjectionMatrix();
+    renderer.setSize(width.value, height.value);
   };
 };

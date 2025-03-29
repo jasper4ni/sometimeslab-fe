@@ -1,9 +1,9 @@
 import gsap from "gsap";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-const iconCache = {}; // 贴图缓存
+const iconCache = new Map<string, THREE.Texture>(); // 贴图缓存
 
-export function createCamera(width, height, FOV = 75) {
+export function createCamera(width: number, height: number, FOV = 75) {
   const camera = new THREE.PerspectiveCamera(
     FOV, // 视角（FOV）
     width / height, // 纵横比
@@ -14,14 +14,14 @@ export function createCamera(width, height, FOV = 75) {
   return camera;
 }
 
-export function createRenderer(width, height) {
+export function createRenderer(width: number, height: number) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio); // 适配高分屏
   renderer.setSize(width, height);
   return renderer;
 }
 
-export function createManager(recall) {
+export function createManager(recall: Function) {
   // 监听所有资源加载完成
   const manager = new THREE.LoadingManager();
   manager.onLoad = function () {
@@ -42,7 +42,7 @@ export function createManager(recall) {
   return manager;
 }
 
-export function createTexture(manager, src) {
+export function createTexture(manager: THREE.LoadingManager, src: string) {
   const textureLoader = new THREE.TextureLoader(manager);
   // 替换成你的全景图片路径
   const texture = textureLoader.load(src, (texture) => {
@@ -52,10 +52,10 @@ export function createTexture(manager, src) {
     texture.generateMipmaps = false; // 禁用 Mipmaps，减少模糊
   });
 
-  return [textureLoader, texture];
+  return texture;
 }
 
-export function createSphere(texture) {
+export function createSphere(texture: THREE.Texture) {
   const geometry = new THREE.SphereGeometry(500, 128, 128);
   geometry.scale(-1, 1, 1); // 反转球体，使纹理在内部可见
   const material = new THREE.MeshBasicMaterial({
@@ -65,17 +65,29 @@ export function createSphere(texture) {
   return [new THREE.Mesh(geometry, material), material];
 }
 
+export function createCubeTexture(manager: THREE.LoadingManager, path: string) {
+  const loader = new THREE.CubeTextureLoader(manager);
+  return loader.load([
+    `${path}/px.jpg`, // 右 (Positive X)
+    `${path}/nx.jpg`, // 左 (Negative X)
+    `${path}/py.jpg`, // 上 (Positive Y)
+    `${path}/ny.jpg`, // 下 (Negative Y)
+    `${path}/pz.jpg`, // 前 (Positive Z)
+    `${path}/nz.jpg`, // 后 (Negative Z)
+  ]);
+}
+
 export function createIcon(
-  { x, y, z },
-  iconPath,
-  scene,
-  { scaleX, scaleY },
-  payload
+  { x, y, z }: { x: number; y: number; z: number },
+  iconPath: string,
+  scene: THREE.Scene,
+  { scaleX, scaleY }: { scaleX: number; scaleY: number },
+  payload: Object
 ) {
-  let iconTexture = iconCache[iconPath];
+  let iconTexture = iconCache.get(iconPath);
   if (!iconTexture) {
     iconTexture = new THREE.TextureLoader().load(iconPath);
-    iconCache[iconPath] = iconTexture;
+    iconCache.set(iconPath, iconTexture);
   }
 
   const spriteMaterial = new THREE.SpriteMaterial({
@@ -101,29 +113,36 @@ export function createIcon(
   return sprite;
 }
 
-export function createControl(camera, renderer) {
+export function createControl(
+  camera: THREE.PerspectiveCamera,
+  renderer: THREE.WebGLRenderer
+) {
   const controls = new OrbitControls(camera, renderer.domElement);
 
   controls.enableDamping = true; // 启用惯性
   controls.dampingFactor = 0.1; // 适中的阻尼
-  controls.rotateSpeed = -0.5; // 旋转速度
+  controls.rotateSpeed = -0.3; // 旋转速度
   controls.enableZoom = false; // ❌ 禁用默认缩放，改用自定义插值缩放
   controls.enablePan = false; // 禁止平移
-  controls.minDistance = 30; // 允许无限接近目标
-  controls.maxDistance = 300; // 允许放得更大
+  // controls.minDistance = 30; // 允许无限接近目标
+  // controls.maxDistance = 300; // 允许放得更大
 
   return controls;
 }
 
-export function loadScene(scene, src, manager) {
-  // 清空当前场景
-  while (scene.children.length > 0) {
-    scene.remove(scene.children[0]);
-  }
-  // 新场景
-  const texture = createTexture(manager, src);
-  // 创建球体并应用贴图
-  const [sphere, material] = createSphere(texture);
-  scene.add(sphere);
-  console.log("🎉 加载了新场景");
-}
+export const loadTexture = (url: string) => {
+  const loader = new THREE.TextureLoader();
+  const texture = loader.load(url, (texture) => {
+    texture.colorSpace = THREE.SRGBColorSpace; // 设置正确的颜色空间
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = false; // 禁用 Mipmaps，减少模糊
+  });
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    side: THREE.DoubleSide,
+  });
+  material.depthTest = false;
+  material.depthWrite = false;
+  return material;
+};

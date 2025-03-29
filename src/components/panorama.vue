@@ -78,7 +78,6 @@ const scenes = [
   },
 ];
 
-// 创建场景
 const scene = new THREE.Scene();
 const width = ref();
 const height = ref();
@@ -87,7 +86,6 @@ let camera = null;
 let material = null;
 let renderer = null;
 let controls = null;
-let textureLoader = null;
 let icons = [];
 let onResize = null;
 let onMouseUp = null;
@@ -146,36 +144,6 @@ onMounted(() => {
   controls = createControl(camera, renderer);
   controls.rotateSpeed = 0;
   controls.update();
-  if (!onWheel) {
-    onWheel = (event) => {
-      event.preventDefault();
-      if (loading.value) return;
-      const zoomFactor = event.deltaY > 0 ? 1.2 : 0.8; // 🟢 **指数缩放**
-      currentFov.value = camera.fov * zoomFactor;
-
-      // 计算新的平移速度，让它随着 FOV 变化
-      const newSpeed = baseSpeed * (currentFov.value / maxFov); // 🔥 FOV 越小，速度越慢
-      // 限制 FOV 范围，避免太小或太大
-      currentFov.value = Math.max(minFov, Math.min(maxFov, currentFov.value));
-
-      // 🚀 使用 gsap 平滑过渡
-      gsap.to(camera, {
-        fov: currentFov.value,
-        duration: 0.5,
-        ease: "power2.out",
-        onUpdate: () => camera.updateProjectionMatrix(), // 🔥 记得更新投影矩阵
-      });
-
-      // 🚀 平滑调整 OrbitControls 的平移速度
-      gsap.to(controls, {
-        maxSpeed: newSpeed, // 这个参数可能需要根据你的控件库调整
-        duration: 0.5,
-        ease: "power2.out",
-      });
-    };
-    // 🚀 监听滚轮事件，修改 targetZoom
-    renderer.domElement.addEventListener("wheel", onWheel);
-  }
 
   // 贴图加载管理器
   const manager = createManager(() => {
@@ -183,44 +151,51 @@ onMounted(() => {
     // 动画：放大视角
     gsap.to(camera, {
       fov: 75, // 目标FOV
-      duration: 2, // 3秒完成动画
-      ease: "power2.out",
+      duration: 4, // 3秒完成动画
+      ease: "power1.in",
       onUpdate: () => camera.updateProjectionMatrix(),
       onComplete: () => {
+        preloadScenes(scenes);
+      },
+    });
+
+    gsap.to(camera.position, {
+      x: currentScene.value.cameraPosition.x,
+      y: currentScene.value.cameraPosition.y,
+      z: currentScene.value.cameraPosition.z,
+      duration: 4,
+      ease: "power2.in",
+      onComplete: () => {
+        // 创建 icons
         loading.value = false;
         controls.rotateSpeed = -0.5;
         controls.update();
-        preloadScenes(scenes);
+        const newIconScale = baseIconScale * (camera.fov / baseFov);
+        icons = currentScene.value.icons.map(({ x, y, z, icon, nextId }) => {
+          return createIcon(
+            { x, y, z },
+            icon,
+            scene,
+            { scaleX: newIconScale, scaleY: newIconScale },
+            scenes.find((v) => v.id === nextId)
+          );
+        });
       },
     });
   });
 
   // 加载全景图
-  const [textureLoaderValue, texture] = createTexture(
-    manager,
-    currentScene.value.texture
-  );
-  textureLoader = textureLoaderValue;
+  const texture = createTexture(manager, currentScene.value.texture);
   textureCache.set(sceneId.value, texture);
 
   const [sphere, materialValue] = createSphere(texture);
   material = materialValue;
   scene.add(sphere);
 
-  // 创建 icons
-  icons = currentScene.value.icons.map(({ x, y, z, icon, nextId }) => {
-    return createIcon(
-      x,
-      y,
-      z,
-      icon,
-      scene,
-      scenes.find((v) => v.id === nextId)
-    );
-  });
+  // const texture = createCubeTexture(manager, "/cubeMap/brown");
 
   // Init default camera position
-  resetCameraPosition();
+  // resetCameraPosition();
 
   // ✅ 确保事件只绑定一次
   if (!onResize) {
@@ -275,6 +250,37 @@ onMounted(() => {
     window.addEventListener("mouseup", onMouseUp);
   }
 
+  if (!onWheel) {
+    onWheel = (event) => {
+      event.preventDefault();
+      if (loading.value) return;
+      const zoomFactor = event.deltaY > 0 ? 1.2 : 0.8; // 🟢 **指数缩放**
+      currentFov.value = camera.fov * zoomFactor;
+
+      // 计算新的平移速度，让它随着 FOV 变化
+      const newSpeed = baseSpeed * (currentFov.value / maxFov); // 🔥 FOV 越小，速度越慢
+      // 限制 FOV 范围，避免太小或太大
+      currentFov.value = Math.max(minFov, Math.min(maxFov, currentFov.value));
+
+      // 🚀 使用 gsap 平滑过渡
+      gsap.to(camera, {
+        fov: currentFov.value,
+        duration: 0.5,
+        ease: "power2.out",
+        onUpdate: () => camera.updateProjectionMatrix(), // 🔥 记得更新投影矩阵
+      });
+
+      // 🚀 平滑调整 OrbitControls 的平移速度
+      gsap.to(controls, {
+        maxSpeed: newSpeed, // 这个参数可能需要根据你的控件库调整
+        duration: 0.5,
+        ease: "power2.out",
+      });
+    };
+    // 🚀 监听滚轮事件，修改 targetZoom
+    renderer.domElement.addEventListener("wheel", onWheel);
+  }
+
   function animate() {
     if (!isAnimating || !renderer) return; // 停止循环
     requestAnimationFrame(animate);
@@ -291,6 +297,29 @@ function switchScene(newSceneId, newIcons) {
   controls.rotateSpeed = 0;
   controls.update();
   const newTexture = changeScene(newSceneId);
+  finalizeScene(newTexture, newIcons);
+
+  // gsap.to(material, {
+  //   opacity: 0, // 先淡出
+  //   duration: 1,
+  //   ease: "power2.out",
+  //   onComplete: () => {
+  //     const newTexture = changeScene(newSceneId);
+  //     finalizeScene(newTexture, newIcons);
+
+  //     gsap.to(material, {
+  //       opacity: 1, // 再淡入
+  //       duration: 1,
+  //       ease: "power2.in",
+  //       onComplete: () => {
+  //         loading.value = false;
+  //         controls.rotateSpeed = -0.5;
+  //         controls.update();
+  //         rerenderIcons(newIcons);
+  //       },
+  //     });
+  //   },
+  // });
 
   if (camera.fov > targetFov) {
     // 🔹 FOV 大于 75，先缩小 FOV 再切换场景
@@ -298,33 +327,50 @@ function switchScene(newSceneId, newIcons) {
       fov: targetFov,
       duration: 1.5,
       ease: "power2.out",
-      onUpdate: () => camera.updateProjectionMatrix(),
+      onUpdate: () => {
+        camera.updateProjectionMatrix();
+        const newIconScale = baseIconScale * (camera.fov / baseFov);
+        icons.forEach((icon) => {
+          icon.scale.set(newIconScale, newIconScale, newIconScale);
+        });
+      },
       onComplete: () => {
-        finalizeScene(newTexture, newIcons);
         loading.value = false;
         controls.rotateSpeed = -0.5;
         controls.update();
+        rerenderIcons(newIcons);
         currentFov.value = targetFov;
       },
     });
   } else if (camera.fov < targetFov) {
     // 🔹 FOV 小于 75，先切换场景再调整 FOV
-    finalizeScene(newTexture, newIcons);
     gsap.to(camera, {
       fov: targetFov,
       duration: 1.5,
       ease: "power2.out",
-      onUpdate: () => camera.updateProjectionMatrix(),
+      onUpdate: () => {
+        camera.updateProjectionMatrix();
+        const newIconScale = baseIconScale * (camera.fov / baseFov);
+        icons.forEach((icon) => {
+          icon.scale.set(newIconScale, newIconScale, 1);
+        });
+      },
       onComplete: () => {
-        loading.value = false;
         controls.rotateSpeed = -0.5;
         controls.update();
+        rerenderIcons(newIcons);
         currentFov.value = targetFov;
+        loading.value = false;
       },
     });
   } else {
     // 🔹 FOV 正好是 75，直接切换场景
     finalizeScene(newTexture, newIcons);
+    rerenderIcons(newIcons);
+    controls.rotateSpeed = -0.5;
+    controls.update();
+    currentFov.value = targetFov;
+    loading.value = false;
   }
 }
 
@@ -336,51 +382,46 @@ function changeScene(newSceneId) {
   let newTexture = textureCache.get(newSceneId);
   if (!newTexture) {
     console.log(`🕵️ 纹理未缓存，开始加载: ${newSceneId}`);
-    newTexture = textureLoader.load(
-      scenes.find((v) => v.id === newSceneId).texture,
-      (texture) => {
-        texture.colorSpace = THREE.SRGBColorSpace;
-        textureCache.set(newSceneId, texture);
-        resolve(texture);
-      }
+    const manager = createManager(() => {
+      console.log("new manager");
+    });
+    newTexture = createTexture(
+      manager,
+      scenes.find((v) => v.id === newSceneId).texture
     );
+    textureCache.set(newSceneId, newTexture);
   }
   return newTexture;
 }
 
 function finalizeScene(newTexture, newIcons) {
-  if (material.map !== newTexture) {
+  if (newTexture && material.map !== newTexture) {
+    icons.forEach((icon) => {
+      scene.remove(icon);
+      icon.material.dispose(); // 释放纹理
+      icon.geometry && icon.geometry.dispose();
+    });
+    icons = [];
     material.map = newTexture;
     material.needsUpdate = true;
   }
   // ✅ 切换场景后重置相机
   resetCameraPosition();
-  rerenderIcons(newIcons);
 }
 
 function rerenderIcons(newIcons) {
-  while (icons.length > newIcons.length) {
-    const icon = icons.pop();
-    scene.remove(icon);
-  }
-  newIcons.forEach(({ x, y, z, icon, nextId }, index) => {
-    if (icons[index]) {
-      icons[index].position.set(x, y, z);
-      icons[index].userData = scenes.find((v) => v.id === nextId);
-    } else {
-      icons.push(
-        createIcon(
-          x,
-          y,
-          z,
-          icon,
-          scene,
-          scenes.find((v) => v.id === nextId)
-        )
-      );
-    }
+  newIcons.forEach(({ x, y, z, icon, nextId }) => {
+    const newIconScale = baseIconScale * (camera.fov / baseFov);
+    icons.push(
+      createIcon(
+        { x, y, z },
+        icon,
+        scene,
+        { scaleX: newIconScale, scaleY: newIconScale },
+        scenes.find((v) => v.id === nextId)
+      )
+    );
   });
-  loading.value = false;
 }
 
 function resetCameraPosition() {
@@ -403,11 +444,13 @@ function preloadScenes(scenesToPreload) {
   // ✅ 预加载所有场景纹理
   scenesToPreload.forEach((scene) => {
     if (!textureCache.has(scene.id)) {
-      const texture = textureLoader.load(scene.texture, () => {
-        texture.colorSpace = THREE.SRGBColorSpace;
-        textureCache.set(scene.id, texture);
+      const manager = createManager(() => {
+        console.log("new manager");
         console.log(`✅ 预加载完成: ${scene.id}`);
       });
+      // 加载全景图
+      const texture = createTexture(manager, scene.texture);
+      textureCache.set(scene.id, texture);
     }
   });
 }

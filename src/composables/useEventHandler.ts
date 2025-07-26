@@ -9,7 +9,8 @@ interface HandleOnWheelParams {
 interface HandleMouseUpParams {
   raycaster: THREE.Raycaster;
   scene: THREE.Scene;
-  icons: Array<THREE.Sprite>;
+  // icons: Array<THREE.Sprite>;
+  getIcon: Function;
   camera: THREE.PerspectiveCamera;
   iconCallback?: Function;
 }
@@ -48,12 +49,16 @@ export const handleMouseDown = (event: MouseEvent) => {
 export const handleMouseUp = ({
   raycaster,
   scene,
-  icons,
+  getIcon,
   camera,
   iconCallback,
 }: HandleMouseUpParams) => {
   return (event: MouseEvent) => {
-    console.log("当前相机位置:", { ...camera.position });
+    const position = {};
+    Object.keys(camera.position).forEach(function (key, index) {
+      position[key] = camera.position[key].toFixed(6);
+    });
+    console.log("当前相机位置:", { ...position });
     // 计算鼠标在 NDC 坐标系的坐标（归一化设备坐标）
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -70,11 +75,10 @@ export const handleMouseUp = ({
     if (intersects.length > 0) {
       const intersect = intersects[0]; // 获取最近的交点
       const position = intersect.point; // 获取 3D 空间中的点击点坐标
-      console.log("鼠标指向的3D坐标:", position);
-      // createIcon(position);
+      // console.log("鼠标指向的3D坐标:", position);
     }
     // 计算射线与场景中的对象相交情况
-    console.log(icons);
+    const icons = getIcon();
 
     if (distance < dragThreshold && icons && icons.length && iconCallback) {
       const intersectsIcon = raycaster.intersectObjects(icons, true);

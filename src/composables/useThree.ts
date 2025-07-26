@@ -1,4 +1,3 @@
-import gsap from "gsap";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 const iconCache = new Map<string, THREE.Texture>(); // 贴图缓存
@@ -100,23 +99,25 @@ export function createIcon(
   const spriteMaterial = new THREE.SpriteMaterial({
     map: iconTexture,
     depthTest: false,
+    transparent: true,
   });
   const sprite = new THREE.Sprite(spriteMaterial);
   sprite.scale.set(scaleX, scaleY, 1); // 控制 icon 大小
   sprite.position.set(x, y, z); // 设置 icon 坐标
   // 添加点击事件
   sprite.userData = payload;
+  sprite.renderOrder = 2;
   scene.add(sprite);
   // 透明度变化
-  gsap.fromTo(
-    sprite.material,
-    { opacity: 0 },
-    {
-      opacity: 1,
-      duration: 0.8,
-      ease: "power2.out",
-    }
-  );
+  // gsap.fromTo(
+  //   sprite.material,
+  //   { opacity: 0 },
+  //   {
+  //     opacity: 1,
+  //     duration: 0.5,
+  //     ease: "power2.out",
+  //   }
+  // );
   return sprite;
 }
 
@@ -137,17 +138,23 @@ export function createControl(
   return controls;
 }
 
-export const loadTexture = (url: string, manager: THREE.LoadingManager) => {
+export const loadTexture = (
+  url: string,
+  manager: THREE.LoadingManager,
+  renderer: THREE.WebGLRenderer
+) => {
   const loader = new THREE.TextureLoader(manager);
   const texture = loader.load(url, (texture) => {
     texture.colorSpace = THREE.SRGBColorSpace; // 设置正确的颜色空间
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
     texture.generateMipmaps = false; // 禁用 Mipmaps，减少模糊
+    texture.anisotropy = renderer.capabilities.getMaxAnisotropy(); // 提升质量
   });
   const material = new THREE.MeshBasicMaterial({
     map: texture,
-    side: THREE.DoubleSide,
+    side: THREE.BackSide,
+    transparent: true,
   });
   material.depthTest = false;
   material.depthWrite = false;

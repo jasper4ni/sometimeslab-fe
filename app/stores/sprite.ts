@@ -1,3 +1,4 @@
+import { defineStore } from "pinia";
 import * as THREE from "three";
 
 export const useSpriteStore = defineStore("spriteStore", {

@@ -1,5 +1,6 @@
 <template>
   <div class="layout relative">
+    <Sidebar />
     <slot />
     <UProgress
       v-if="progress.on"
